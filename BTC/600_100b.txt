@@ -1,0 +1,327 @@
+from numpy.core.defchararray import array
+from numpy.core.fromnumeric import argmax, argmin
+from numpy.lib.polynomial import poly1d, polyfit
+from scipy import optimize
+import os
+import numpy as np
+import pandas as pd
+import matplotlib.pyplot as plt
+import seaborn as sns
+import statistics
+import matplotlib
+from sklearn.metrics import accuracy_score
+from sklearn.metrics import confusion_matrix
+from sklearn.metrics import mean_squared_error , r2_score
+from sklearn.linear_model import LinearRegression
+from statsmodels.tsa.ar_model import AutoReg
+from sklearn import linear_model
+from statsmodels.tsa.arima.model import ARIMA
+from statsmodels.tsa.api import ExponentialSmoothing, SimpleExpSmoothing, Holt
+
+
+
+sns.set()
+
+
+#importing dataset
+
+ticker='BTC-USD_weekly_return_volatility_detailed'
+input_dir = os.getcwd()
+ticker_file = os.path.join(input_dir, ticker + '.csv')
+
+try:   
+    with open(ticker_file) as f:
+        lines = f.read().splitlines()
+    print('opened file for ticker: ', ticker)
+    
+    
+except Exception as e:
+    print(e)
+    print('failed to read stock data for ticker: ', ticker)
+
+
+df_b = pd.read_csv(ticker_file)
+
+
+
+
+
+ticker='LTC-USD_weekly_return_volatility_detailed'
+input_dir = os.getcwd()
+ticker_file = os.path.join(input_dir, ticker + '.csv')
+
+try:   
+    with open(ticker_file) as f:
+        lines = f.read().splitlines()
+    print('opened file for ticker: ', ticker)
+    
+    
+except Exception as e:
+    print(e)
+    print('failed to read stock data for ticker: ', ticker)
+
+
+df_l = pd.read_csv(ticker_file)
+
+
+#print(df_b.corr(),df_l.corr(),df_e.corr())
+
+
+
+
+
+
+
+#preparing dataset
+
+a, b = np.split(df_b, [int(.5*len(df_b))])
+a1,b1 = np.split(df_l, [int(.5*len(df_l))])
+
+b3 = df_b.head(600)
+
+z,y = [],[]
+
+
+
+
+
+
+c = df_b['Close']
+pv = []
+for x in range(601,701):
+    pv.append(c[x])
+
+
+
+for k in range(100):
+    z.append(k)
+ 
+
+
+
+
+
+#600 training, 100 prediction
+
+
+
+
+
+
+rms = []
+#AutoRegressive
+z1 = b3["Close"]
+for lag1 in range(11):
+    pvb = pv
+    ar_model1 = AutoReg(z1, lags=lag1).fit()
+    pred1 = ar_model1.predict(start = 0,end = (len(z)-1),dynamic=False)
+#print('AR')
+#print(pred1)
+    p1n = []
+    for x in range(lag1,len(pred1)):
+        p1n.append(pred1[x])
+
+    
+    pvb = pvb[lag1:]
+    ms = mean_squared_error(pvb, p1n, squared=True)
+    rms.append(ms)
+
+
+
+min1 = argmin(rms)
+print(min1)
+
+#best lag = 1
+
+ar_model1b = AutoReg(z1, lags=1).fit()
+pred1b = ar_model1b.predict(start = 0,end = (len(z)-1),dynamic=False)
+
+
+plt.title('AutoRegressive')
+plt.plot(z,pv, label = 'Actual')
+plt.plot(z,pred1b, label = 'Predicted')
+plt.xlabel('Number of Days')
+plt.ylabel('Value in USD')
+plt.legend(loc = 'upper right')
+plt.show()
+
+
+
+
+
+
+
+
+#ARIMA
+#rms1 = []
+z2 = b3['Close']
+#for lag in range(1,11):
+#    for ma in range(1,8):
+#        model1 = ARIMA(z2, order=(lag,1,ma)) #lag = x for AR, diff order of 1 to make TimeSeries stationary, MA model = 0 ----->(x,1,0) 
+#        model_fit1 = model1.fit()
+#        output1 = model_fit1.predict(start = 0,end = (len(z)-1))
+#        #print('ARIMA')
+#        #print(output1)
+#        r = mean_squared_error(pv, output1, squared=True)
+#        rms1.append(r)
+
+#min = argmin(rms1)
+#print(min+1)
+
+
+#best lag = 7 with AR = 1, ma = 4
+
+
+model1b = ARIMA(z2, order=(7,1,4)) #lag = x for AR, diff order of 1 to make TimeSeries stationary, MA model = 0 ----->(5,1,0) 
+model_fit1b = model1b.fit()
+out1 = model_fit1b.predict(start = 0,end = (len(z)-1))
+rb = mean_squared_error(pv, out1, squared=True)
+
+
+
+
+plt.title('ARIMA')
+plt.plot(z,pv, label = 'Actual')
+plt.plot(z,out1, label = 'Predicted')
+plt.xlabel('Number of Days')
+plt.ylabel('Value in USD')
+plt.legend(loc = 'upper right')
+plt.show()
+
+
+
+
+
+
+
+
+
+
+#Simple EXP Smoothing
+z3 = b3['Close']
+model2 = SimpleExpSmoothing(z3) 
+model_fit2 = model2.fit() #auto
+yhat2 = model_fit2.predict(start = 0,end = (len(z)-1))
+#print('ES')
+#print(yhat2)
+
+rms2 = mean_squared_error(pv, yhat2, squared=True)
+#print(rms2)
+
+
+
+
+plt.title('Simple Exponential Smoothing')
+plt.plot(z,pv, label = 'Actual')
+plt.plot(z,yhat2, label = 'Predicted')
+plt.xlabel('Number of Days')
+plt.ylabel('Value in USD')
+plt.legend(loc = 'upper right')
+plt.show()
+
+
+
+
+
+
+
+
+rms3 = []
+#HOLT 
+z4 = b3['Close']
+for sm in range(1,11,1):
+    for ss in range(1,11,1):
+        m1= Holt(z4)
+        mf1 = m1.fit(smoothing_level=sm/10, smoothing_slope=ss/10, optimized=False)
+        o1 = mf1.predict(start = 0,end = (len(z)-1))
+        #print('HOLT')
+        #print(o1)
+        r3 = mean_squared_error(pv, o1, squared=True)
+        rms3.append(r3)
+ar = argmin(rms3)
+print(ar+1)
+#0.8 , 0.7 best
+
+
+
+
+m1b= Holt(z4)
+mf1b = m1b.fit(smoothing_level=0.8, smoothing_slope=0.7, optimized=False)
+o1b = mf1b.predict(start = 0,end = (len(z)-1))
+
+r3b = mean_squared_error(pv, o1b, squared=True)
+
+
+
+plt.title('Holt')
+plt.plot(z,pv, label = 'Actual')
+plt.plot(z,o1b, label = 'Predicted')
+plt.xlabel('Number of Days')
+plt.ylabel('Value in USD')
+plt.legend(loc = 'upper right')
+plt.show()
+
+
+
+
+
+rms4 = []
+#EX
+z5 = b3['Close']
+for sm in range(1,11,1):
+    for ss in range(1,11,1):
+        m2 = ExponentialSmoothing(z5)
+        mf2 = m2.fit(smoothing_level=sm/10, smoothing_slope=ss/10) 
+        o2 = mf2.predict(start = 0,end = (len(z)-1))
+        #print('EX')
+        #print(o2)
+
+        rm4 = mean_squared_error(pv, o2, squared=True)
+        rms4.append(rm4)
+        
+ar1 = argmin(rms4)
+print(ar1+1)
+
+#best 0.1, 0.1
+
+
+m2b = ExponentialSmoothing(z5)
+mf2b = m2b.fit(smoothing_level=0.1, smoothing_slope=0.1) 
+o2b = mf2b.predict(start = 0,end = (len(z)-1))
+r4b = mean_squared_error(pv, o2b, squared=True)
+
+
+plt.title('Exponential Smoothing')
+plt.plot(z,pv, label = 'Actual')
+plt.plot(z,o2b, label = 'Predicted')
+plt.xlabel('Number of Days')
+plt.ylabel('Value in USD')
+plt.legend(loc = 'upper right')
+plt.show()
+
+
+
+
+
+
+
+
+
+print('AutoRegressive (RMSE)')
+print(rms[1])
+
+
+print('ARIMA (RMSE)')
+print(rb)
+
+
+print('Simple Exponential Smoothing (RMSE)')
+print(rms2)
+
+
+print('HOLT (RMSE)')
+print(r3b)
+
+
+print('Exponential Smoothing (RMSE)')
+print(r4b)
